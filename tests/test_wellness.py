@@ -1,7 +1,3 @@
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 from src.analytics.wellness import (
     compute_burnout_risk,
     compute_productivity_score,

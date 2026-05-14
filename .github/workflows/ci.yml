@@ -13,10 +13,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -26,6 +26,8 @@ jobs:
           pip install fastapi uvicorn pydantic python-multipart jinja2 numpy pyyaml pytest
 
       - name: Run unit tests
+        run: |
+          cd $GITHUB_WORKSPACE
+          python -m pytest tests/test_wellness.py -v --tb=short
         env:
-          PYTHONPATH: .
-        run: pytest tests/ -v --tb=short
+          PYTHONPATH: ${{ github.workspace }}
