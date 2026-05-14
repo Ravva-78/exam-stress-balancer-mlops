@@ -104,7 +104,7 @@
 
   {% if result %}
 
-  <!-- ── URGENCY BANNER (full width) ──────────────────────── -->
+  <!-- ── URGENCY BANNER ───────────────────────────────────── -->
   {% if urgency %}
   <div class="urgency-banner {{ urgency.level }}">
     <strong>{{ urgency.level }} URGENCY · {{ state.days_left }} day{% if state.days_left != 1 %}s{% endif %} remaining</strong>
@@ -115,13 +115,9 @@
   </div>
   {% endif %}
 
-  <!-- ════════════════════════════════════════════════════════
-       ROW 1 — Recommendation (left 60%) + Score cards (right 40%)
-       ════════════════════════════════════════════════════════ -->
+  <!-- ROW 1 — Recommendation + Score cards -->
   {% set action_cls = "study" if result == "Study" else ("revise" if result == "Revise" else "sleepbrk") %}
   <div class="dash-row-1">
-
-    <!-- LEFT: Recommendation hero -->
     <div class="hero-col">
       <div class="result-hero" style="height:100%">
         <div class="action-badge {{ action_cls }}">
@@ -140,7 +136,6 @@
             {% endif %}
           </div>
           {% endif %}
-          <!-- Recovery tips compact inside hero -->
           {% if recovery_tips %}
           <div class="hero-tips">
             {% for tip in recovery_tips[:2] %}
@@ -152,10 +147,8 @@
       </div>
     </div>
 
-    <!-- RIGHT: 3 score cards stacked -->
     {% if burnout and productivity and wellness %}
     <div class="scores-col">
-      <!-- Burnout -->
       <div class="metric-card">
         <div class="metric-row">
           <div>
@@ -168,7 +161,6 @@
         </div>
         <div class="m-bar"><div class="m-bar-fill" style="width:{{ burnout.score }}%;background:{% if burnout.score >= 60 %}#e11d48{% elif burnout.score >= 35 %}#d97706{% else %}#059669{% endif %}"></div></div>
       </div>
-      <!-- Productivity -->
       <div class="metric-card">
         <div class="metric-row">
           <div>
@@ -182,7 +174,6 @@
         <div class="m-bar"><div class="m-bar-fill" style="width:{{ productivity.score }}%;background:{% if productivity.score >= 65 %}#06b6d4{% elif productivity.score >= 35 %}#d97706{% else %}#e11d48{% endif %}"></div></div>
         <div class="m-sub" style="margin-top:6px">{{ productivity.insight }}</div>
       </div>
-      <!-- Wellness -->
       <div class="metric-card">
         <div class="metric-row">
           <div>
@@ -200,12 +191,9 @@
     {% endif %}
   </div>
 
-  <!-- ════════════════════════════════════════════════════════
-       ROW 2 — Study Plan (left 62%) + Analysis sidebar (right 38%)
-       ════════════════════════════════════════════════════════ -->
+  <!-- ROW 2 — Study Plan + Sidebar -->
   <div class="dash-row-2">
 
-    <!-- LEFT: Study plan table -->
     {% if study_plan and study_plan.plan %}
     <div class="plan-col">
       <div class="section-label">{{ study_plan.plan | length }}-Day Adaptive Study Plan</div>
@@ -253,7 +241,6 @@
             </tbody>
           </table>
         </div>
-        <!-- Plan Summary Footer -->
         {% if study_plan.summary %}
         {% set s = study_plan.summary %}
         <div class="plan-summary">
@@ -267,13 +254,92 @@
         </div>
         {% endif %}
       </div>
+
+      <!-- ── TRAJECTORY CHART (NEW) ────────────────────────── -->
+      <div class="section-label" style="margin-top:18px">State Trajectory</div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Fatigue · Stress · Retention across Plan Days</span>
+          <span style="font-family:var(--font-mono);font-size:0.68rem;color:#a0aec0">RL simulated projection</span>
+        </div>
+        <div style="padding:20px 24px">
+          <svg viewBox="0 0 600 160" style="width:100%;height:auto;overflow:visible" aria-label="State trajectory chart">
+
+            <!-- Y-axis grid lines + labels -->
+            {% for i in range(5) %}
+            {% set y = 8 + i * 33 %}
+            <line x1="38" y1="{{ y }}" x2="590" y2="{{ y }}"
+                  stroke="rgba(102,126,234,0.1)" stroke-width="1"/>
+            <text x="30" y="{{ y + 4 }}" text-anchor="end"
+                  font-family="DM Mono,monospace" font-size="9" fill="#a0aec0">
+              {{ 100 - i * 25 }}
+            </text>
+            {% endfor %}
+
+            {% set n = study_plan.plan | length %}
+            {% set step = 552 / ([n - 1, 1] | max) %}
+
+            <!-- Fatigue area fill -->
+            <polygon fill="rgba(225,29,72,0.06)"
+              points="{% for day in study_plan.plan %}{{ 38 + loop.index0 * step }},{{ 8 + (100 - day.state_snapshot.fatigue) * 1.32 }} {% endfor %}{{ 38 + (n-1) * step }},140 38,140"/>
+
+            <!-- Retention area fill -->
+            <polygon fill="rgba(5,150,105,0.07)"
+              points="{% for day in study_plan.plan %}{{ 38 + loop.index0 * step }},{{ 8 + (100 - day.state_snapshot.retention * 100) * 1.32 }} {% endfor %}{{ 38 + (n-1) * step }},140 38,140"/>
+
+            <!-- Fatigue line -->
+            <polyline fill="none" stroke="#e11d48" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"
+              points="{% for day in study_plan.plan %}{{ 38 + loop.index0 * step }},{{ 8 + (100 - day.state_snapshot.fatigue) * 1.32 }} {% endfor %}"/>
+
+            <!-- Stress line -->
+            <polyline fill="none" stroke="#d97706" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,3"
+              points="{% for day in study_plan.plan %}{{ 38 + loop.index0 * step }},{{ 8 + (100 - day.state_snapshot.stress) * 1.32 }} {% endfor %}"/>
+
+            <!-- Retention line -->
+            <polyline fill="none" stroke="#059669" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round"
+              points="{% for day in study_plan.plan %}{{ 38 + loop.index0 * step }},{{ 8 + (100 - day.state_snapshot.retention * 100) * 1.32 }} {% endfor %}"/>
+
+            <!-- Dots on retention -->
+            {% for day in study_plan.plan %}
+            <circle cx="{{ 38 + loop.index0 * step }}"
+                    cy="{{ 8 + (100 - day.state_snapshot.retention * 100) * 1.32 }}"
+                    r="3.5" fill="#059669" stroke="white" stroke-width="1.5"/>
+            {% endfor %}
+
+            <!-- Day labels on X axis -->
+            {% for day in study_plan.plan %}
+            <text x="{{ 38 + loop.index0 * step }}" y="155"
+                  text-anchor="middle" font-family="DM Mono,monospace"
+                  font-size="9" fill="#a0aec0">D{{ day.day }}</text>
+            {% endfor %}
+
+          </svg>
+
+          <!-- Legend -->
+          <div style="display:flex;gap:20px;margin-top:4px;flex-wrap:wrap">
+            <span style="font-family:'DM Mono',monospace;font-size:0.7rem;color:#e11d48;display:flex;align-items:center;gap:5px">
+              <span style="display:inline-block;width:18px;height:2px;background:#e11d48;border-radius:1px"></span>Fatigue
+            </span>
+            <span style="font-family:'DM Mono',monospace;font-size:0.7rem;color:#d97706;display:flex;align-items:center;gap:5px">
+              <span style="display:inline-block;width:18px;height:2px;background:#d97706;border-radius:1px;border-bottom:2px dashed #d97706"></span>Stress
+            </span>
+            <span style="font-family:'DM Mono',monospace;font-size:0.7rem;color:#059669;display:flex;align-items:center;gap:5px">
+              <span style="display:inline-block;width:18px;height:2px;background:#059669;border-radius:1px"></span>Retention
+            </span>
+          </div>
+        </div>
+      </div>
+      <!-- ── END TRAJECTORY CHART ──────────────────────────── -->
+
     </div>
     {% endif %}
 
     <!-- RIGHT: Analysis sidebar -->
     <div class="sidebar-col">
 
-      <!-- Burnout Detail -->
       {% if burnout %}
       <div class="section-label">Burnout Analysis</div>
       <div class="card sidebar-card" style="margin-bottom:16px">
@@ -292,7 +358,6 @@
       </div>
       {% endif %}
 
-      <!-- Q-Value Confidence -->
       {% if q_values %}
       <div class="section-label">RL Model Confidence</div>
       <div class="card sidebar-card" style="margin-bottom:16px">
@@ -320,7 +385,6 @@
       </div>
       {% endif %}
 
-      <!-- Recovery Tips -->
       {% if recovery_tips %}
       <div class="section-label">Recovery Tips</div>
       <div class="card sidebar-card">
@@ -332,13 +396,13 @@
       </div>
       {% endif %}
 
-    </div><!-- /sidebar-col -->
-  </div><!-- /dash-row-2 -->
+    </div>
+  </div>
 
   <div class="divider"></div>
-  {% endif %}{# end if result #}
+  {% endif %}
 
-  <!-- ── SESSION HISTORY (compact full-width) ──────────────── -->
+  <!-- ── SESSION HISTORY ───────────────────────────────────── -->
   <div class="section-label">Recent Sessions</div>
   {% if history %}
   <div class="history-list">
@@ -360,7 +424,6 @@
   <div class="card"><div class="empty-state"><div class="icon">📋</div>No sessions yet — submit your first state above.</div></div>
   {% endif %}
 
-  <!-- ── FOOTER API LINKS ──────────────────────────────────── -->
   <div class="divider"></div>
   <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;padding-bottom:16px">
     <span style="font-family:var(--font-mono);font-size:0.67rem;color:#a0aec0">REST API →</span>
@@ -372,7 +435,7 @@
     <a class="anchor-link" href="/api/wellness" target="_blank">/wellness</a>
   </div>
 
-</div><!-- /shell -->
+</div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
