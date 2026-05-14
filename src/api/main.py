@@ -175,8 +175,8 @@ async def predict_form(
     urgency        = classify_urgency(days_left, retention_val)
     recovery       = get_recovery_suggestions(state, action)
 
-    plan_state = dict(state, days_left=min(days_left, 7))
-    study_plan = generate_study_plan(plan_state, hybrid_predict, max_days=min(days_left, 7))
+    plan_state = dict(state, days_left=min(days_left, 14))
+    study_plan = generate_study_plan(plan_state, hybrid_predict, max_days=min(days_left, 14))
 
     q_values = {ACTION_LABELS[a]: v for a, v in debug["combined"].items()} if debug.get("combined") else None
 
