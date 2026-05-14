@@ -1,0 +1,121 @@
+schema: '2.0'
+stages:
+  train:
+    cmd: python -m src.training.train_rl
+    deps:
+    - path: src/config.py
+      hash: md5
+      md5: b9e44a20f5f0d144e87dffad09da76d6
+      size: 4459
+    - path: src/training/train_rl.py
+      hash: md5
+      md5: 43ad728d5d4f6fdf68e40f37e471d6d7
+      size: 6185
+    - path: src/utils/helpers.py
+      hash: md5
+      md5: a457b68057ebf40f15d9177c1dad58d1
+      size: 5486
+    - path: src/utils/logger.py
+      hash: md5
+      md5: 466b00f0204591f9416bb56ca86c5d99
+      size: 2505
+    params:
+      params.yaml:
+        training.algorithm: sarsa
+        training.discount_factor: 0.95
+        training.episodes: 3000
+        training.epsilon: 1.0
+        training.epsilon_decay: 0.999
+        training.epsilon_min: 0.01
+        training.learning_rate: 0.05
+        training.seed: 42
+    outs:
+    - path: models/metadata.json
+      hash: md5
+      md5: e3714115965ee0e4200a61c00b35aa4e
+      size: 737
+  evaluate:
+    cmd: python -m src.evaluation.evaluate_rl
+    deps:
+    - path: models/metadata.json
+      hash: md5
+      md5: e3714115965ee0e4200a61c00b35aa4e
+      size: 737
+    - path: src/config.py
+      hash: md5
+      md5: b9e44a20f5f0d144e87dffad09da76d6
+      size: 4459
+    - path: src/evaluation/evaluate_rl.py
+      hash: md5
+      md5: cdfdf60705cea9199f6b3eab17c3035b
+      size: 6208
+    - path: src/utils/helpers.py
+      hash: md5
+      md5: a457b68057ebf40f15d9177c1dad58d1
+      size: 5486
+    - path: src/utils/logger.py
+      hash: md5
+      md5: 466b00f0204591f9416bb56ca86c5d99
+      size: 2505
+    outs:
+    - path: evaluations/evaluation_report.json
+      hash: md5
+      md5: 629f9523094e012741aa58fdbef0f08f
+      size: 3013
+  compare_baselines:
+    cmd: python -m src.evaluation.compare_baselines
+    deps:
+    - path: models/metadata.json
+      hash: md5
+      md5: e3714115965ee0e4200a61c00b35aa4e
+      size: 737
+    - path: src/config.py
+      hash: md5
+      md5: b9e44a20f5f0d144e87dffad09da76d6
+      size: 4459
+    - path: src/evaluation/baselines.py
+      hash: md5
+      md5: 332336c2ec425e63a6816efdf528c35e
+      size: 1297
+    - path: src/evaluation/compare_baselines.py
+      hash: md5
+      md5: d2f4393dd20a5a3401b5dd4efb03194d
+      size: 7440
+    - path: src/rl/agent/state_discretizer.py
+      hash: md5
+      md5: 6864f8897bf06e6b042d83708625210a
+      size: 1079
+    - path: src/rl/student_environment.py
+      hash: md5
+      md5: 5489c0052baa8d0951b1baabe62d3459
+      size: 7126
+    - path: src/utils/helpers.py
+      hash: md5
+      md5: a457b68057ebf40f15d9177c1dad58d1
+      size: 5486
+    outs:
+    - path: results/baseline_comparison.json
+      hash: md5
+      md5: f1b281e2638e4fedfdb1dde75f802364
+      size: 1347
+  visualize:
+    cmd: python -m src.visualization.plot_results
+    deps:
+    - path: evaluations/evaluation_report.json
+      hash: md5
+      md5: 629f9523094e012741aa58fdbef0f08f
+      size: 3013
+    - path: results/baseline_comparison.json
+      hash: md5
+      md5: f1b281e2638e4fedfdb1dde75f802364
+      size: 1347
+    - path: src/visualization/plot_results.py
+      hash: md5
+      md5: 5c15a5016c56912324c1c0503655737d
+      size: 9083
+    outs:
+    - path: results/plots
+      hash: md5
+      md5: 9b36116aacdd2df29ee1431ab7d5a164.dir
+      size: 284283
+      nfiles: 3

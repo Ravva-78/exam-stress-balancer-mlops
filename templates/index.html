@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exam Stress Balancer — RL Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600&family=Outfit:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="bg-orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+
+<div class="shell">
+
+  <!-- ── TOPBAR ─────────────────────────────────────────── -->
+  <nav class="topbar">
+    <div class="brand">
+      <div class="brand-icon">🧠</div>
+      <div>
+        <div class="brand-name">Exam Stress Balancer</div>
+        <div class="brand-tag">HYBRID RL · Q-LEARNING + SARSA</div>
+      </div>
+    </div>
+    <div class="topbar-badge">v3.0 · <span>MLOps</span> · FastAPI</div>
+  </nav>
+
+  <!-- ── INPUT FORM ─────────────────────────────────────── -->
+  <div class="page-intro">
+    <h1>Adaptive Study Intelligence</h1>
+    <p>Reinforcement Learning analyses your cognitive state and generates an intelligent multi-day plan to optimise exam readiness.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:28px">
+    <div class="card-header">
+      <span class="card-title">Current State Input</span>
+      <span class="section-label" style="margin:0">→ RL State Vector</span>
+    </div>
+    <div class="card-pad">
+      <form method="post" action="/predict">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="fatigue">Fatigue Level <span class="hint">Physical tiredness</span></label>
+            <div class="select-wrap">
+              <select id="fatigue" name="fatigue" required>
+                <option value="" disabled {% if not result %}selected{% endif %}>Select fatigue</option>
+                <option value="low"    {% if state and state.fatigue == 20  %}selected{% endif %}>Low — Fresh &amp; energetic</option>
+                <option value="medium" {% if state and state.fatigue == 50  %}selected{% endif %}>Medium — Slightly tired</option>
+                <option value="high"   {% if state and state.fatigue == 85  %}selected{% endif %}>High — Exhausted</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="stress">Stress Level <span class="hint">Anxiety &amp; pressure</span></label>
+            <div class="select-wrap">
+              <select id="stress" name="stress" required>
+                <option value="" disabled {% if not result %}selected{% endif %}>Select stress</option>
+                <option value="low"    {% if state and state.stress == 20  %}selected{% endif %}>Low — Calm &amp; relaxed</option>
+                <option value="medium" {% if state and state.stress == 50  %}selected{% endif %}>Medium — Some anxiety</option>
+                <option value="high"   {% if state and state.stress == 85  %}selected{% endif %}>High — Very stressed</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="retention">Retention Rate <span class="hint">Memory performance</span></label>
+            <div class="select-wrap">
+              <select id="retention" name="retention" required>
+                <option value="" disabled {% if not result %}selected{% endif %}>Select retention</option>
+                <option value="low"    {% if state and state.retention == 0.2  %}selected{% endif %}>Low — Forgetting often</option>
+                <option value="medium" {% if state and state.retention == 0.5  %}selected{% endif %}>Medium — Average recall</option>
+                <option value="high"   {% if state and state.retention == 0.85 %}selected{% endif %}>High — Strong memory</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="days_left">Days Until Exam <span class="hint">Time remaining</span></label>
+            <input type="number" id="days_left" name="days_left" min="1" max="60" required
+                   placeholder="e.g. 7" value="{{ state.days_left if state else '' }}">
+          </div>
+          <div class="form-group full">
+            <label for="difficulty">Exam Difficulty <span class="hint">Expected complexity</span></label>
+            <div class="select-wrap">
+              <select id="difficulty" name="difficulty" required>
+                <option value="" disabled {% if not result %}selected{% endif %}>Select difficulty</option>
+                <option value="easy"   {% if state and state.difficulty == 'easy'   %}selected{% endif %}>Easy — Light review needed</option>
+                <option value="medium" {% if state and state.difficulty == 'medium' %}selected{% endif %}>Medium — Solid preparation required</option>
+                <option value="hard"   {% if state and state.difficulty == 'hard'   %}selected{% endif %}>Hard — Deep mastery essential</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="submit-btn">
+          <span>Generate Adaptive Plan</span>
+          <span class="arrow">→</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% if result %}
+
+  <!-- ── URGENCY BANNER (full width) ──────────────────────── -->
+  {% if urgency %}
+  <div class="urgency-banner {{ urgency.level }}">
+    <strong>{{ urgency.level }} URGENCY · {{ state.days_left }} day{% if state.days_left != 1 %}s{% endif %} remaining</strong>
+    {{ urgency.message }}
+    {% if urgency.retention_warning %}
+    <div class="ret-warning mt-8">⚠ {{ urgency.retention_warning }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ════════════════════════════════════════════════════════
+       ROW 1 — Recommendation (left 60%) + Score cards (right 40%)
+       ════════════════════════════════════════════════════════ -->
+  {% set action_cls = "study" if result == "Study" else ("revise" if result == "Revise" else "sleepbrk") %}
+  <div class="dash-row-1">
+
+    <!-- LEFT: Recommendation hero -->
+    <div class="hero-col">
+      <div class="result-hero" style="height:100%">
+        <div class="action-badge {{ action_cls }}">
+          <div class="icon">{{ action_icon }}</div>
+          <div class="label">{{ result }}</div>
+        </div>
+        <div class="result-body">
+          <h2>Recommended: {{ result }}</h2>
+          <p>{{ explanation }}</p>
+          {% if adaptive_weights %}
+          <div class="weight-pills">
+            <span class="pill q">Q-Learning {{ "%.0f"|format(adaptive_weights.q * 100) }}%</span>
+            <span class="pill sarsa">SARSA {{ "%.0f"|format(adaptive_weights.sarsa * 100) }}%</span>
+            {% if adaptive_weights.q != 0.6 %}
+            <span class="pill mode">⚡ Adaptive weights</span>
+            {% endif %}
+          </div>
+          {% endif %}
+          <!-- Recovery tips compact inside hero -->
+          {% if recovery_tips %}
+          <div class="hero-tips">
+            {% for tip in recovery_tips[:2] %}
+            <div class="hero-tip">{{ tip }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: 3 score cards stacked -->
+    {% if burnout and productivity and wellness %}
+    <div class="scores-col">
+      <!-- Burnout -->
+      <div class="metric-card">
+        <div class="metric-row">
+          <div>
+            <div class="m-label">Burnout Risk</div>
+            <div class="m-score {% if burnout.score >= 60 %}c-rose{% elif burnout.score >= 35 %}c-amber{% else %}c-emerald{% endif %}">
+              {{ "%.0f"|format(burnout.score) }}<span style="font-size:0.9rem;opacity:0.5">/100</span>
+            </div>
+          </div>
+          <span class="burnout-badge {{ burnout.level }}">{{ burnout.level }}</span>
+        </div>
+        <div class="m-bar"><div class="m-bar-fill" style="width:{{ burnout.score }}%;background:{% if burnout.score >= 60 %}#e11d48{% elif burnout.score >= 35 %}#d97706{% else %}#059669{% endif %}"></div></div>
+      </div>
+      <!-- Productivity -->
+      <div class="metric-card">
+        <div class="metric-row">
+          <div>
+            <div class="m-label">Productivity</div>
+            <div class="m-score {% if productivity.score >= 65 %}c-teal{% elif productivity.score >= 35 %}c-amber{% else %}c-rose{% endif %}">
+              {{ "%.0f"|format(productivity.score) }}<span style="font-size:0.9rem;opacity:0.5">/100</span>
+            </div>
+          </div>
+          <span class="score-tag">{{ productivity.label }}</span>
+        </div>
+        <div class="m-bar"><div class="m-bar-fill" style="width:{{ productivity.score }}%;background:{% if productivity.score >= 65 %}#06b6d4{% elif productivity.score >= 35 %}#d97706{% else %}#e11d48{% endif %}"></div></div>
+        <div class="m-sub" style="margin-top:6px">{{ productivity.insight }}</div>
+      </div>
+      <!-- Wellness -->
+      <div class="metric-card">
+        <div class="metric-row">
+          <div>
+            <div class="m-label">Wellness</div>
+            <div class="m-score {% if wellness.score >= 60 %}c-emerald{% elif wellness.score >= 35 %}c-amber{% else %}c-rose{% endif %}">
+              {{ "%.0f"|format(wellness.score) }}<span style="font-size:0.9rem;opacity:0.5">/100</span>
+            </div>
+          </div>
+          <span class="score-tag">{{ wellness.label }}</span>
+        </div>
+        <div class="m-bar"><div class="m-bar-fill" style="width:{{ wellness.score }}%;background:{% if wellness.score >= 60 %}#059669{% elif wellness.score >= 35 %}#d97706{% else %}#e11d48{% endif %}"></div></div>
+        <div class="m-sub" style="margin-top:6px">{{ wellness.summary }}</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════
+       ROW 2 — Study Plan (left 62%) + Analysis sidebar (right 38%)
+       ════════════════════════════════════════════════════════ -->
+  <div class="dash-row-2">
+
+    <!-- LEFT: Study plan table -->
+    {% if study_plan and study_plan.plan %}
+    <div class="plan-col">
+      <div class="section-label">{{ study_plan.plan | length }}-Day Adaptive Study Plan</div>
+      <div class="card plan-card">
+        <div class="card-header">
+          <span class="card-title">Day-by-Day RL Recommendations</span>
+          <span style="font-family:var(--font-mono);font-size:0.68rem;color:#a0aec0">Simulated forward trajectory</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="plan-table">
+            <thead>
+              <tr>
+                <th>Day</th><th>Action</th><th>Fatigue</th>
+                <th>Stress</th><th>Retention</th><th>Burnout</th>
+                <th>Prod%</th><th>Advice</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for day in study_plan.plan %}
+              {% set ac = "study" if day.action == "Study" else ("revise" if day.action == "Revise" else "sleepbrk") %}
+              <tr>
+                <td><span class="day-num">D{{ day.day }}</span></td>
+                <td><span class="action-chip {{ ac }}">{{ day.action_icon }} {{ day.action }}</span></td>
+                <td>
+                  <div class="mini-bar"><div class="mini-fill" style="width:{{ day.state_snapshot.fatigue }}%;background:{% if day.state_snapshot.fatigue > 65 %}#e11d48{% elif day.state_snapshot.fatigue > 40 %}#d97706{% else %}#059669{% endif %}"></div></div>
+                  <span style="font-family:var(--font-mono);font-size:0.65rem;color:#a0aec0">{{ "%.0f"|format(day.state_snapshot.fatigue) }}</span>
+                </td>
+                <td>
+                  <div class="mini-bar"><div class="mini-fill" style="width:{{ day.state_snapshot.stress }}%;background:{% if day.state_snapshot.stress > 65 %}#e11d48{% elif day.state_snapshot.stress > 40 %}#d97706{% else %}#06b6d4{% endif %}"></div></div>
+                  <span style="font-family:var(--font-mono);font-size:0.65rem;color:#a0aec0">{{ "%.0f"|format(day.state_snapshot.stress) }}</span>
+                </td>
+                <td>
+                  <div class="mini-bar"><div class="mini-fill" style="width:{{ (day.state_snapshot.retention * 100)|round }}%;background:#059669"></div></div>
+                  <span style="font-family:var(--font-mono);font-size:0.65rem;color:#a0aec0">{{ (day.state_snapshot.retention * 100)|round|int }}%</span>
+                </td>
+                <td><span class="burnout-badge {{ day.burnout_level }}" style="font-size:0.62rem;padding:2px 6px">{{ day.burnout_level[:3] }}</span></td>
+                <td>
+                  <span style="font-family:var(--font-mono);font-size:0.72rem;font-weight:600;color:{% if day.productivity_score >= 65 %}#06b6d4{% elif day.productivity_score >= 35 %}#d97706{% else %}#e11d48{% endif %}">
+                    {{ "%.0f"|format(day.productivity_score) }}%
+                  </span>
+                </td>
+                <td><span class="plan-advice">{{ day.advice }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <!-- Plan Summary Footer -->
+        {% if study_plan.summary %}
+        {% set s = study_plan.summary %}
+        <div class="plan-summary">
+          <div class="sum-item"><span class="sum-key">Study</span><span class="sum-val c-violet">{{ s.study_days }}d</span></div>
+          <div class="sum-item"><span class="sum-key">Revise</span><span class="sum-val c-emerald">{{ s.revise_days }}d</span></div>
+          <div class="sum-item"><span class="sum-key">Rest</span><span class="sum-val c-amber">{{ s.rest_days }}d</span></div>
+          <div class="sum-item"><span class="sum-key">Balance</span><span class="sum-val {% if s.balance_score >= 65 %}c-emerald{% elif s.balance_score >= 35 %}c-amber{% else %}c-rose{% endif %}">{{ "%.0f"|format(s.balance_score) }}%</span></div>
+          <div class="sum-item"><span class="sum-key">End Retention</span><span class="sum-val c-teal">{{ (s.projected_retention * 100)|round|int }}%</span></div>
+          <div class="sum-item"><span class="sum-key">End Burnout</span><span class="sum-val {% if s.final_burnout_level == 'LOW' %}c-emerald{% elif s.final_burnout_level == 'MEDIUM' %}c-amber{% else %}c-rose{% endif %}">{{ s.final_burnout_level }}</span></div>
+          <div class="sum-item"><span class="sum-key">RL Reward</span><span class="sum-val c-amber">{{ "%.1f"|format(s.cumulative_reward) }}</span></div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- RIGHT: Analysis sidebar -->
+    <div class="sidebar-col">
+
+      <!-- Burnout Detail -->
+      {% if burnout %}
+      <div class="section-label">Burnout Analysis</div>
+      <div class="card sidebar-card" style="margin-bottom:16px">
+        <div class="card-header" style="padding:12px 16px">
+          <span class="card-title" style="font-size:0.88rem">Risk Factors</span>
+          <span class="burnout-badge {{ burnout.level }}" style="font-size:0.62rem">{{ burnout.level }} · {{ "%.0f"|format(burnout.score) }}/100</span>
+        </div>
+        <div style="padding:14px 16px">
+          <div class="burnout-factors" style="margin-bottom:12px">
+            {% for f in burnout.factors %}
+            <span class="factor-tag">{{ f }}</span>
+            {% endfor %}
+          </div>
+          <div class="recovery-tip">{{ burnout.recovery_tip }}</div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Q-Value Confidence -->
+      {% if q_values %}
+      <div class="section-label">RL Model Confidence</div>
+      <div class="card sidebar-card" style="margin-bottom:16px">
+        <div class="card-header" style="padding:12px 16px">
+          <span class="card-title" style="font-size:0.88rem">Q-Value Scores</span>
+          <span style="font-family:var(--font-mono);font-size:0.62rem;color:#a0aec0">{{ "%.0f"|format(adaptive_weights.q * 100) }}% / {{ "%.0f"|format(adaptive_weights.sarsa * 100) }}%</span>
+        </div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+          {% set vals = q_values.values() | list %}
+          {% set min_v = vals | min %}
+          {% set max_v = vals | max %}
+          {% set rng = (max_v - min_v) if (max_v - min_v) > 0 else 1 %}
+          {% for action_name, val in q_values.items() %}
+          {% set pct = ((val - min_v) / rng * 80 + 10) | round(1) %}
+          {% set is_best = val == max_v %}
+          <div class="qval-row">
+            <span class="qval-action">{{ action_name }}{% if is_best %} ★{% endif %}</span>
+            <div class="qval-bar-wrap">
+              <div class="qval-bar-fill" style="width:{{ pct }}%;background:{% if is_best %}#667eea{% else %}rgba(102,126,234,0.15){% endif %}"></div>
+            </div>
+            <span class="qval-val">{{ "%.3f"|format(val) }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Recovery Tips -->
+      {% if recovery_tips %}
+      <div class="section-label">Recovery Tips</div>
+      <div class="card sidebar-card">
+        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+          {% for tip in recovery_tips %}
+          <div class="tip-item" style="padding:10px 12px;font-size:0.82rem">{{ tip }}</div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div><!-- /sidebar-col -->
+  </div><!-- /dash-row-2 -->
+
+  <div class="divider"></div>
+  {% endif %}{# end if result #}
+
+  <!-- ── SESSION HISTORY (compact full-width) ──────────────── -->
+  <div class="section-label">Recent Sessions</div>
+  {% if history %}
+  <div class="history-list">
+    {% for s in history %}
+    {% set ac = "study" if s.action == "Study" else ("revise" if s.action == "Revise" else "sleepbrk") %}
+    <div class="history-row">
+      <span class="h-time">{{ s.timestamp[11:16] }}</span>
+      <span class="h-action {{ ac }}">{{ s.action }}</span>
+      <span class="h-meta">{{ s.fatigue_label|capitalize }} fatigue · {{ s.stress_label|capitalize }} stress · {{ s.days_left }}d · {{ s.difficulty|capitalize }}</span>
+      <div class="h-scores">
+        <span class="h-score-pill">🔥 {{ "%.0f"|format(s.burnout_score) }}</span>
+        <span class="h-score-pill">⚡ {{ "%.0f"|format(s.productivity_score) }}</span>
+        <span class="h-score-pill">💚 {{ "%.0f"|format(s.wellness_score) }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card"><div class="empty-state"><div class="icon">📋</div>No sessions yet — submit your first state above.</div></div>
+  {% endif %}
+
+  <!-- ── FOOTER API LINKS ──────────────────────────────────── -->
+  <div class="divider"></div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;padding-bottom:16px">
+    <span style="font-family:var(--font-mono);font-size:0.67rem;color:#a0aec0">REST API →</span>
+    <a class="anchor-link" href="/docs" target="_blank">/docs</a>
+    <a class="anchor-link" href="/api/history">/history</a>
+    <a class="anchor-link" href="/health">/health</a>
+    <a class="anchor-link" href="/api/study-plan" target="_blank">/study-plan</a>
+    <a class="anchor-link" href="/api/burnout" target="_blank">/burnout</a>
+    <a class="anchor-link" href="/api/wellness" target="_blank">/wellness</a>
+  </div>
+
+</div><!-- /shell -->
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const hero = document.querySelector('.result-hero');
+  if (hero) setTimeout(() => hero.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+  document.querySelectorAll('.m-bar-fill, .qval-bar-fill, .mini-fill').forEach(el => {
+    const w = el.style.width; el.style.width = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.width = w; }));
+  });
+});
+</script>
+</body>
+</html>

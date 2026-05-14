@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DVC Pipeline — Exam Stress Balancer
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+
+  # ── Training Stage ──────────────────────────────────────────────────────────
+  train:
+    cmd: python -m src.training.train_rl
+    deps:
+      - src/training/train_rl.py
+      - src/config.py
+      - src/utils/helpers.py
+      - src/utils/logger.py
+    params:
+      - params.yaml:
+          - training.episodes
+          - training.learning_rate
+          - training.discount_factor
+          - training.epsilon
+          - training.epsilon_min
+          - training.epsilon_decay
+          - training.seed
+          - training.algorithm
+    outs:
+      - models/metadata.json   # ✅ only stable output
+    desc: Train RL agent (Q-Learning / SARSA based on config)
+
+  # ── Evaluation Stage ────────────────────────────────────────────────────────
+  evaluate:
+    cmd: python -m src.evaluation.evaluate_rl
+    deps:
+      - src/evaluation/evaluate_rl.py
+      - src/config.py
+      - src/utils/helpers.py
+      - src/utils/logger.py
+      - models/metadata.json
+    outs:
+      - evaluations/evaluation_report.json
+    desc: Evaluate trained model and generate report
+
+  # ── Baseline Comparison Stage ────────────────────────────────────────────────
+  compare_baselines:
+    cmd: python -m src.evaluation.compare_baselines
+    deps:
+      - src/evaluation/compare_baselines.py
+      - src/evaluation/baselines.py
+      - src/rl/student_environment.py
+      - src/rl/agent/state_discretizer.py
+      - src/config.py
+      - src/utils/helpers.py
+      - models/metadata.json
+    outs:
+      - results/baseline_comparison.json
+    desc: Compare RL agents against random and rule-based baselines
+
+  # ── Visualization Stage ───────────────────────────────────────────────────────
+  visualize:
+    cmd: python -m src.visualization.plot_results
+    deps:
+      - src/visualization/plot_results.py
+      - evaluations/evaluation_report.json
+      - results/baseline_comparison.json
+    outs:
+      - results/plots
+    desc: Generate reward curves and policy comparison plots

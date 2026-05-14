@@ -1,0 +1,20 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DVC Parameters — Exam Stress Balancer
+# Modify values here to trigger `dvc repro`
+# ─────────────────────────────────────────────────────────────────────────────
+
+training:
+  episodes: 3000
+  max_steps: 200
+  learning_rate: 0.05
+  discount_factor: 0.95
+  epsilon: 1.0
+  epsilon_min: 0.01
+  epsilon_decay: 0.999
+  seed: 42
+  algorithm: sarsa  # options: q_learning | sarsa
+
+evaluation:
+  num_episodes: 100
+  max_steps: 200
+  seed: 0
