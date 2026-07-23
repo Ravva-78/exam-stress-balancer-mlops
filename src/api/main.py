@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, model_validator
+from typing import Optional
 
 from src.utils.logger import get_logger
 from src.utils.helpers import load_pickle
@@ -210,17 +211,17 @@ async def predict_form(
 # ── JSON API ─────────────────────────────────────────────────────────────────
 
 class PredictRequest(BaseModel):
-    fatigue:    int | None = Field(default=None, ge=0, le=100)
-    stress:     int | None = Field(default=None, ge=0, le=100)
-    retention:  float | None = Field(default=None, ge=0.0, le=1.0)
-    days_left:  int | None = Field(default=None, ge=0)
+    fatigue:    Optional[int] = Field(default=None, ge=0, le=100)
+    stress:     Optional[int] = Field(default=None, ge=0, le=100)
+    retention:  Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    days_left:  Optional[int] = Field(default=None, ge=0)
     difficulty: str   = Field(default="medium")
 
     # Client schema support
-    stress_level: str | None = None
-    hours_studied: int | None = None
-    days_until_exam: int | None = None
-    current_performance: float | None = None
+    stress_level: Optional[str] = None
+    hours_studied: Optional[int] = None
+    days_until_exam: Optional[int] = None
+    current_performance: Optional[float] = None
 
     @model_validator(mode='before')
     @classmethod
