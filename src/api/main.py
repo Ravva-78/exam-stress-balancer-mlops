@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.utils.logger import get_logger
 from src.utils.helpers import load_pickle
@@ -71,6 +71,9 @@ def save_history():
 
 def hybrid_predict(state_dict: dict) -> tuple[int, dict]:
     actions = [0, 1, 2]
+    if state_dict.get("stress", 50) >= 95:
+        return 2, {"q_learning": {}, "sarsa": {}, "combined": {}, "q_weight": 0.0, "sarsa_weight": 1.0, "safety_override": True}
+
     if not _model_store["loaded"]:
         if state_dict.get("stress", 50) > 70 or state_dict.get("fatigue", 50) > 70:
             action = 2
@@ -114,7 +117,9 @@ def build_explanation(state: dict, action: int, debug: dict) -> str:
             reasons.append(f"Fatigue at {fatigue:.0f}/100 severely limits learning efficiency.")
         reasons.append("Recovery now compounds into better performance over the remaining days.")
 
-    if abs(q_w - 0.6) > 0.05:
+    if debug.get("safety_override"):
+        reasons.append("Safety override active: Critical stress (>=95) detected — ignoring RL model and forcing immediate rest.")
+    elif abs(q_w - 0.6) > 0.05:
         if s_w > q_w:
             reasons.append(f"Safety mode active (SARSA {s_w:.0%}): high fatigue/stress detected — conservative recommendations enabled.")
         else:
@@ -205,11 +210,41 @@ async def predict_form(
 # ── JSON API ─────────────────────────────────────────────────────────────────
 
 class PredictRequest(BaseModel):
-    fatigue:    int   = Field(..., ge=0, le=100)
-    stress:     int   = Field(..., ge=0, le=100)
-    retention:  float = Field(..., ge=0.0, le=1.0)
-    days_left:  int   = Field(..., ge=0)
+    fatigue:    int | None = Field(default=None, ge=0, le=100)
+    stress:     int | None = Field(default=None, ge=0, le=100)
+    retention:  float | None = Field(default=None, ge=0.0, le=1.0)
+    days_left:  int | None = Field(default=None, ge=0)
     difficulty: str   = Field(default="medium")
+
+    # Client schema support
+    stress_level: str | None = None
+    hours_studied: int | None = None
+    days_until_exam: int | None = None
+    current_performance: float | None = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def map_client_schema(cls, data: dict) -> dict:
+        if isinstance(data, dict):
+            if data.get('stress_level'):
+                sm = {"low": 20, "medium": 50, "high": 85, "critical": 100}
+                data['stress'] = sm.get(data['stress_level'].lower(), 50)
+            
+            if data.get('hours_studied') is not None:
+                data['fatigue'] = min(data['hours_studied'] * 10, 100)
+                
+            if data.get('days_until_exam') is not None:
+                data['days_left'] = data['days_until_exam']
+                
+            if data.get('current_performance') is not None:
+                data['retention'] = data['current_performance']
+                
+            reqs = ['fatigue', 'stress', 'retention', 'days_left']
+            for r in reqs:
+                if data.get(r) is None:
+                    raise ValueError(f"Missing required field: {r} (or mapping failed)")
+                    
+        return data
 
 
 @app.get("/health")
