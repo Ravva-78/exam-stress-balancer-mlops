@@ -1,6 +1,18 @@
-# Exam Stress Balancer — Hybrid RL + MLOps (v3.1.0)
+<div align="center">
+  <img src="docs/assets/banner.png" alt="Exam Stress Balancer Banner" width="800">
+</div>
+
+# Exam Stress Balancer — Hybrid RL + MLOps
 
 > **AI-powered adaptive exam preparation assistant** using Reinforcement Learning to optimize study balance, prevent burnout, and maximize exam readiness.
+
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Available-success?style=for-the-badge&logo=render)](https://exam-stresss-balancer.onrender.com)
+[![Project Status](https://img.shields.io/badge/Status-v3.1.0_Stable-blue?style=for-the-badge)]()
+<br>
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python)](https://python.org)
+[![MLflow](https://img.shields.io/badge/MLflow-2.10+-0194E2?logo=mlflow)](https://mlflow.org)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](https://docker.com)
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python)](https://python.org)
@@ -27,6 +39,14 @@ The project employs a dual-agent Reinforcement Learning model to balance aggress
 **Critical Safety Override (v3.1.0):** If stress levels hit a critical threshold (>=95), the RL models are completely overridden, forcing immediate rest.
 
 *For full technical details, see [docs/architecture.md](docs/architecture.md).*
+
+---
+
+## 📸 UI Preview
+
+![Dashboard](docs/assets/screenshots/dashboard.png)
+![Study Plan](docs/assets/screenshots/study_plan.png)
+![Recommendation](docs/assets/screenshots/recommendation.png)
 
 ---
 
@@ -87,5 +107,10 @@ The project is configured for PaaS deployment (e.g., Render, Railway) via the in
 
 ## 📋 Changelog
 For version history, see the [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## 🎓 About
+This project was developed as a comprehensive ML portfolio piece, demonstrating end-to-end expertise in Reinforcement Learning, MLOps, backend engineering, and UI design. It showcases the ability to architect complex AI systems with strict safety boundaries and deploy them to production. 
 
 *Built with Python 3.11 · FastAPI · MLflow · DVC · Docker*
