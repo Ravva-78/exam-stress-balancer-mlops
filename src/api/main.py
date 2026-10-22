@@ -1,17 +1,18 @@
 """
-Exam Stress Balancer — Enhanced API (v3.0)
+Exam Stress Balancer — Hybrid RL serving API.
 """
 
 import json, time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Query, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, model_validator
-from typing import Optional
+from typing import Literal, Optional
 
 from src.utils.logger import get_logger
 from src.utils.helpers import load_pickle
@@ -30,8 +31,12 @@ _model_store = {"q_table_q": None, "q_table_s": None, "loaded": False, "startup_
 _SESSION_HISTORY: list[dict] = []
 _HISTORY_FILE = Path("data/session_history.json")
 
+APP_VERSION = "3.1.0"
+
 ACTION_LABELS = {0: "Study", 1: "Revise", 2: "Sleep/Break"}
 ACTION_ICONS  = {0: "📖", 1: "🔄", 2: "💤"}
+
+_STRESS_LEVELS = {"low": 20, "medium": 50, "high": 85, "critical": 100}
 
 _LEVEL_MAP = {
     "fatigue":   {"low": 20,  "medium": 50,  "high": 85},
@@ -134,16 +139,17 @@ def build_explanation(state: dict, action: int, debug: dict) -> str:
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Exam Stress Balancer API", version="3.0.0")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
-
-@app.on_event("startup")
-def startup():
+@asynccontextmanager
+async def lifespan(_: FastAPI):
     load_models()
     load_history()
     _model_store["startup_time"] = time.time()
+    yield
+
+
+app = FastAPI(lifespan=lifespan, title="Exam Stress Balancer API", version=APP_VERSION)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 
 @app.middleware("http")
@@ -156,8 +162,8 @@ async def log_requests(request: Request, call_next):
 
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse("index.html", {
-        "request": request, "history": _SESSION_HISTORY[-5:][::-1],
+    return templates.TemplateResponse(request, "index.html", {
+        "history": _SESSION_HISTORY[-5:][::-1],
     })
 
 
@@ -197,8 +203,7 @@ async def predict_form(
     _SESSION_HISTORY.append(session)
     save_history()
 
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "index.html", {
         "result": ACTION_LABELS[action], "action_icon": ACTION_ICONS[action],
         "explanation": explanation, "q_values": q_values, "state": state,
         "burnout": burnout.to_dict(), "productivity": prod.to_dict(),
@@ -215,7 +220,7 @@ class PredictRequest(BaseModel):
     stress:     Optional[int] = Field(default=None, ge=0, le=100)
     retention:  Optional[float] = Field(default=None, ge=0.0, le=1.0)
     days_left:  Optional[int] = Field(default=None, ge=0)
-    difficulty: str   = Field(default="medium")
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
 
     # Client schema support
     stress_level: Optional[str] = None
@@ -225,27 +230,35 @@ class PredictRequest(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def map_client_schema(cls, data: dict) -> dict:
-        if isinstance(data, dict):
-            if data.get('stress_level'):
-                sm = {"low": 20, "medium": 50, "high": 85, "critical": 100}
-                data['stress'] = sm.get(data['stress_level'].lower(), 50)
-            
-            if data.get('hours_studied') is not None:
-                data['fatigue'] = min(data['hours_studied'] * 10, 100)
-                
-            if data.get('days_until_exam') is not None:
-                data['days_left'] = data['days_until_exam']
-                
-            if data.get('current_performance') is not None:
-                data['retention'] = data['current_performance']
-                
-            reqs = ['fatigue', 'stress', 'retention', 'days_left']
-            for r in reqs:
-                if data.get(r) is None:
-                    raise ValueError(f"Missing required field: {r} (or mapping failed)")
-                    
+    def map_client_schema(cls, data):
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)  # never mutate the caller's payload
+        level = data.get('stress_level')
+        if level is not None:
+            if not isinstance(level, str) or level.lower() not in _STRESS_LEVELS:
+                raise ValueError(f"stress_level must be one of {sorted(_STRESS_LEVELS)}")
+            data['stress'] = _STRESS_LEVELS[level.lower()]
+
+        hours = data.get('hours_studied')
+        if hours is not None:
+            if isinstance(hours, bool) or not isinstance(hours, (int, float)) or hours < 0:
+                raise ValueError("hours_studied must be a non-negative number")
+            data['fatigue'] = int(min(hours * 10, 100))
+
+        if data.get('days_until_exam') is not None:
+            data['days_left'] = data['days_until_exam']
+        if data.get('current_performance') is not None:
+            data['retention'] = data['current_performance']
+
+        for r in ('fatigue', 'stress', 'retention', 'days_left'):
+            if data.get(r) is None:
+                raise ValueError(f"Missing required field: {r} (or its client-schema equivalent)")
         return data
+
+    def state(self) -> dict:
+        """Internal ML state only (client-schema fields are dropped)."""
+        return self.model_dump(include={"fatigue", "stress", "retention", "days_left", "difficulty"})
 
 
 @app.get("/health")
@@ -253,12 +266,12 @@ def health():
     uptime = round(time.time() - _model_store["startup_time"], 1) if _model_store["startup_time"] else 0
     return {"status": "ok" if _model_store["loaded"] else "degraded",
             "models_loaded": _model_store["loaded"], "uptime_sec": uptime,
-            "version": "3.0.0", "sessions_tracked": len(_SESSION_HISTORY)}
+            "version": APP_VERSION, "sessions_tracked": len(_SESSION_HISTORY)}
 
 
 @app.post("/api/predict")
 def api_predict(p: PredictRequest):
-    state = p.model_dump()
+    state = p.state()
     action, debug = hybrid_predict(state)
     return {"action_id": int(action), "recommended_action": ACTION_LABELS[action],
             "action_icon": ACTION_ICONS[action], "model": "hybrid_rl_v3",
@@ -268,7 +281,7 @@ def api_predict(p: PredictRequest):
 
 @app.post("/api/explain")
 def api_explain(p: PredictRequest):
-    state = p.model_dump()
+    state = p.state()
     action, debug = hybrid_predict(state)
     fmt = lambda d: {ACTION_LABELS[a]: round(v, 4) for a, v in d.items()}
     return {"action_id": int(action), "recommended_action": ACTION_LABELS[action],
@@ -280,7 +293,7 @@ def api_explain(p: PredictRequest):
 
 @app.post("/api/study-plan")
 def api_study_plan(p: PredictRequest):
-    state = p.model_dump()
+    state = p.state()
     max_days = min(state["days_left"], 14)
     plan = generate_study_plan(state, hybrid_predict, max_days=max_days)
     return {"input_state": state, "plan": plan["plan"], "summary": plan["summary"]}
@@ -288,7 +301,7 @@ def api_study_plan(p: PredictRequest):
 
 @app.post("/api/burnout")
 def api_burnout(p: PredictRequest):
-    state = p.model_dump()
+    state = p.state()
     return {"burnout_risk": compute_burnout_risk(state).to_dict(),
             "urgency": classify_urgency(state["days_left"], state["retention"]),
             "input_state": state}
@@ -296,7 +309,7 @@ def api_burnout(p: PredictRequest):
 
 @app.post("/api/wellness")
 def api_wellness(p: PredictRequest):
-    state = p.model_dump()
+    state = p.state()
     return {"productivity": compute_productivity_score(state).to_dict(),
             "wellness": compute_wellness_score(state).to_dict(),
             "burnout_risk": compute_burnout_risk(state).to_dict(),
@@ -304,7 +317,7 @@ def api_wellness(p: PredictRequest):
 
 
 @app.get("/api/history")
-def api_history(limit: int = 20):
+def api_history(limit: int = Query(20, ge=1, le=50)):
     return {"sessions": _SESSION_HISTORY[-limit:][::-1], "total": len(_SESSION_HISTORY)}
 
 
@@ -314,11 +327,6 @@ def api_clear_history():
     _SESSION_HISTORY = []
     save_history()
     return {"message": "History cleared", "status": "ok"}
-
-
-@app.post("/simulate")
-def simulate(payload: BaseModel):
-    pass  # kept for compatibility
 
 
 if __name__ == "__main__":

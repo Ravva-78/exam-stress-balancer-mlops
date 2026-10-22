@@ -26,4 +26,4 @@ For production deployments (like Render), it is highly recommended to place this
 
 If you discover a security vulnerability or a dangerous edge case in the RL logic (e.g., the system recommending intense study for a highly fatigued individual), please do **NOT** create a public GitHub issue.
 
-Please report it directly via email to the repository maintainer at **security@examstressbalancer.com** or via Twitter DM at **@examstressAI**. We aim to review and patch logical vulnerabilities within 48 hours.
+Please use GitHub's private vulnerability reporting (**Security → Report a vulnerability**) on this repository.

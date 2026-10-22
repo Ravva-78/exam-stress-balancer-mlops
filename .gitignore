@@ -39,6 +39,9 @@ mlartifacts/
 .dvc/cache/
 .dvc/tmp/
 
+# Local session history (runtime data)
+data/session_history.json
+
 # Logs
 logs/*.log
 
