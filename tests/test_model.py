@@ -180,135 +180,67 @@ class TestChecksum:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Training pipeline
+# RL core
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestTrainingPipeline:
-    def test_run_training_logic_returns_dict(self):
-        from src.training.train_rl import run_training_logic
-        from src.config import TRAINING_CONFIG
-
-        config = {**TRAINING_CONFIG, "episodes": 10}   # fast
-        result = run_training_logic(config)
-
-        assert isinstance(result, dict)
-        assert "q_table"         in result
-        assert "episode_rewards" in result
-        assert "final_epsilon"   in result
-        assert "metrics"         in result
-
-    def test_episode_rewards_length(self):
-        from src.training.train_rl import run_training_logic
-        config = {"episodes": 20, "epsilon": 1.0, "epsilon_min": 0.01, "epsilon_decay": 0.995}
-        result = run_training_logic(config)
-        assert len(result["episode_rewards"]) == 20
-
-    def test_metrics_keys(self):
-        from src.training.train_rl import run_training_logic
-        config = {"episodes": 5, "epsilon": 1.0, "epsilon_min": 0.01, "epsilon_decay": 0.99}
-        result = run_training_logic(config)
-        for key in ("avg_reward", "best_reward", "final_epsilon", "total_episodes"):
-            assert key in result["metrics"], f"Missing metric: {key}"
-
-    def test_full_training_creates_artefacts(self, tmp_path):
-        """Integration test: run_training() should write model files."""
-        q_path   = tmp_path / "q_table.pkl"
-        meta_path = tmp_path / "metadata.json"
-
-        with (
-            patch("src.training.train_rl.Q_TABLE_PATH",        q_path),
-            patch("src.training.train_rl.MODEL_METADATA_PATH",  meta_path),
-            patch("src.training.train_rl.MLFLOW_TRACKING_URI",
-                  f"sqlite:///{tmp_path / 'mlflow.db'}"),
-        ):
-            from src.training.train_rl import run_training
-            from src.config import TRAINING_CONFIG
-            config = {**TRAINING_CONFIG, "episodes": 5}
-            run_training(config)
-
-        assert q_path.exists(),    "q_table.pkl not created"
-        assert meta_path.exists(), "metadata.json not created"
+from src.rl.agent.q_learning_agent import QLearningAgent
+from src.rl.agent.state_discretizer import discretize_state
+from src.rl.student_environment import StudentEnvironment
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Evaluation pipeline
-# ═══════════════════════════════════════════════════════════════════════════════
+class TestDiscretizer:
+    def test_bins(self):
+        s = {"fatigue": 10, "stress": 50, "retention": 0.9, "days_left": 1, "difficulty": "hard"}
+        assert discretize_state(s) == ("LOW", "MEDIUM", "HIGH", "HIGH", "HARD")
 
-class TestEvaluationPipeline:
-    def _make_artefacts(self, tmp_path: Path):
-        q_path   = tmp_path / "q_table.pkl"
-        meta_path = tmp_path / "metadata.json"
-        save_pickle([[0.1, 0.2, 0.3, 0.4]] * 4, q_path)
-        save_json({"version": "1.0.0", "created_at": "2024-01-01", "framework": "stub"}, meta_path)
-        return q_path, meta_path
+    def test_urgency_bins(self):
+        base = {"fatigue": 0, "stress": 0, "retention": 0, "difficulty": "easy"}
+        assert discretize_state({**base, "days_left": 4})[3] == "MEDIUM"
+        assert discretize_state({**base, "days_left": 10})[3] == "LOW"
 
-    def test_load_model_returns_dict(self, tmp_path):
-        q_path, meta_path = self._make_artefacts(tmp_path)
-        with (
-            patch("src.evaluation.evaluate_rl.Q_TABLE_PATH",        q_path),
-            patch("src.evaluation.evaluate_rl.MODEL_METADATA_PATH",  meta_path),
-        ):
-            from src.evaluation.evaluate_rl import load_model
-            model = load_model()
 
-        assert "q_table"  in model
-        assert "metadata" in model
+class TestQLearningAgent:
+    def test_update_moves_q_towards_reward(self):
+        agent = QLearningAgent([0, 1, 2], alpha=0.5, gamma=0.9, epsilon=0.0)
+        agent.update("s", 1, 10.0, "s2")
+        assert agent.q_table["s"][1] == pytest.approx(5.0)
 
-    def test_load_model_missing_raises(self, tmp_path):
-        with (
-            patch("src.evaluation.evaluate_rl.Q_TABLE_PATH",
-                  tmp_path / "nope.pkl"),
-            patch("src.evaluation.evaluate_rl.MODEL_METADATA_PATH",
-                  tmp_path / "nope.json"),
-        ):
-            from src.evaluation.evaluate_rl import load_model
-            with pytest.raises(FileNotFoundError):
-                load_model()
+    def test_greedy_picks_best_action(self):
+        agent = QLearningAgent([0, 1, 2], epsilon=0.0)
+        agent.q_table["s"] = {0: 0.0, 1: 3.0, 2: 1.0}
+        assert agent.choose_action("s") == 1
 
-    def test_predict_action_returns_valid_index(self, tmp_path):
-        q_path, meta_path = self._make_artefacts(tmp_path)
-        with (
-            patch("src.evaluation.evaluate_rl.Q_TABLE_PATH",        q_path),
-            patch("src.evaluation.evaluate_rl.MODEL_METADATA_PATH",  meta_path),
-        ):
-            from src.evaluation.evaluate_rl import predict_action
-            q_table = [[0.1, 0.2, 0.3, 0.4]] * 4
-            state   = {"stress_level": "high", "hours_studied": 3.0, "days_until_exam": 5}
-            action  = predict_action(q_table, state)
-        assert 0 <= action <= 3
 
-    def test_full_evaluation_creates_report(self, tmp_path):
-        q_path, meta_path = self._make_artefacts(tmp_path)
-        report_path = tmp_path / "evaluation_report.json"
+class TestEnvironment:
+    def test_episode_terminates(self):
+        random.seed(0)
+        env = StudentEnvironment(total_days=5)
+        env.reset()
+        done, steps = False, 0
+        while not done and steps < 100:
+            _, _, done = env.step(0)
+            steps += 1
+        assert done and steps <= 100
 
-        with (
-            patch("src.evaluation.evaluate_rl.Q_TABLE_PATH",           q_path),
-            patch("src.evaluation.evaluate_rl.MODEL_METADATA_PATH",     meta_path),
-            patch("src.evaluation.evaluate_rl.EVALUATION_REPORT_PATH",  report_path),
-        ):
-            from src.evaluation.evaluate_rl import run_evaluation
-            from src.config import EVALUATION_CONFIG
-            config = {**EVALUATION_CONFIG, "num_episodes": 10}
-            run_evaluation(config)
+    def test_state_stays_in_bounds(self):
+        random.seed(1)
+        env = StudentEnvironment(total_days=10)
+        env.reset()
+        for _ in range(10):
+            state, _, done = env.step(random.choice([0, 1, 2]))
+            assert 0 <= state["fatigue"] <= 100 and 0 <= state["stress"] <= 100
+            assert 0.0 <= state["retention"] <= 1.0
+            if done:
+                break
 
-        assert report_path.exists(), "evaluation_report.json not created"
-        report = load_json(report_path)
-        assert "aggregate_metrics" in report
-        assert "episode_rewards"   in report
 
-    def test_report_aggregate_keys(self, tmp_path):
-        q_path, meta_path = self._make_artefacts(tmp_path)
-        report_path = tmp_path / "evaluation_report.json"
+class TestTrainers:
+    def test_q_learning_trains(self):
+        from src.rl.training.train_q_learning import train_q_learning
+        q_table, metrics = train_q_learning({"episodes": 5})
+        assert q_table and metrics["total_episodes"] == 5
 
-        with (
-            patch("src.evaluation.evaluate_rl.Q_TABLE_PATH",           q_path),
-            patch("src.evaluation.evaluate_rl.MODEL_METADATA_PATH",     meta_path),
-            patch("src.evaluation.evaluate_rl.EVALUATION_REPORT_PATH",  report_path),
-        ):
-            from src.evaluation.evaluate_rl import run_evaluation
-            run_evaluation({"num_episodes": 5, "max_steps": 10, "seed": 0})
-
-        report = load_json(report_path)
-        for key in ("mean_reward", "std_reward", "min_reward", "max_reward",
-                    "success_rate", "total_episodes"):
-            assert key in report["aggregate_metrics"], f"Missing: {key}"
+    def test_sarsa_trains(self):
+        from src.rl.training.train_sarsa import train_sarsa
+        q_table, metrics = train_sarsa({"episodes": 5})
+        assert q_table and metrics["total_episodes"] == 5

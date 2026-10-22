@@ -1,6 +1,6 @@
 """
 Wellness & Burnout Analytics Module
-Exam Stress Balancer — v3.0
+Exam Stress Balancer
 
 Provides:
 - Burnout risk scoring (LOW / MEDIUM / HIGH) with numeric score 0–100

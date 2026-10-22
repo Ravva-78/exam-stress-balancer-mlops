@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="exam-stress-balancer",
-    version="1.0.0",
+    version="3.1.0",
     description="RL-powered exam stress balancer with full MLOps pipeline",
     packages=find_packages(exclude=["tests*"]),
     python_requires=">=3.11",

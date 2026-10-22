@@ -1,185 +1,119 @@
-"""
-Pytest test suite for the FastAPI serving layer.
-
-Run:
-    pytest tests/test_api.py -v
-"""
-
-import json
-import pickle
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+"""Tests for the FastAPI serving layer (JSON API + health)."""
 
 import pytest
 from fastapi.testclient import TestClient
 
+from src.api import main
 
-# ─── Fixtures ─────────────────────────────────────────────────────────────────
-
-@pytest.fixture(scope="module")
-def mock_model_store():
-    """Provide a pre-populated model store so tests don't need real artefacts."""
-    return {
-        "q_table":      [[0.1, 0.2, 0.3, 0.4]] * 4,
-        "metadata":     {
-            "version":    "1.0.0",
-            "created_at": "2024-01-01T00:00:00+00:00",
-            "framework":  "custom-rl",
-        },
-        "loaded":       True,
-        "startup_time": 0.0,
-    }
+CLIENT_PAYLOAD = {
+    "stress_level": "high", "hours_studied": 6,
+    "days_until_exam": 3, "current_performance": 0.4,
+}
+ML_PAYLOAD = {"fatigue": 40, "stress": 50, "retention": 0.5, "days_left": 7, "difficulty": "medium"}
 
 
 @pytest.fixture(scope="module")
-def client(mock_model_store, tmp_path_factory):
-    """
-    Create a TestClient with a mocked model store and fake artefact files.
-    """
-    # Create minimal artefact files so load_model() won't crash
-    artifacts_dir = tmp_path_factory.mktemp("models")
-    q_table_path  = artifacts_dir / "q_table.pkl"
-    metadata_path = artifacts_dir / "metadata.json"
+def client(tmp_path_factory):
+    # Keep session history out of the repo's data/ directory.
+    main._HISTORY_FILE = tmp_path_factory.mktemp("data") / "session_history.json"
+    with TestClient(main.app) as c:
+        yield c
 
-    with open(q_table_path, "wb") as fh:
-        pickle.dump([[0.1, 0.2, 0.3, 0.4]] * 4, fh)
-    with open(metadata_path, "w") as fh:
-        json.dump(mock_model_store["metadata"], fh)
-
-    # Patch config paths and the model store atomically
-    with (
-        patch("src.config.Q_TABLE_PATH",        q_table_path),
-        patch("src.config.MODEL_METADATA_PATH",  metadata_path),
-        patch("src.api.main._model_store",       mock_model_store),
-    ):
-        from src.api.main import app
-        with TestClient(app) as c:
-            yield c
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# /health
-# ═══════════════════════════════════════════════════════════════════════════════
 
 class TestHealth:
-    def test_health_returns_200(self, client):
-        response = client.get("/health")
-        assert response.status_code == 200
-
-    def test_health_body(self, client):
-        data = client.get("/health").json()
-        assert data["status"] == "ok"
-        assert data["model_loaded"] is True
-        assert "uptime_sec" in data
-        assert "version" in data
-
-    def test_health_uptime_non_negative(self, client):
-        data = client.get("/health").json()
-        assert data["uptime_sec"] >= 0
+    def test_health_ok(self, client):
+        body = client.get("/health").json()
+        assert body["status"] in {"ok", "degraded"}
+        assert body["version"] == main.APP_VERSION
+        assert body["models_loaded"] is (body["status"] == "ok")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# /model-info
-# ═══════════════════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("endpoint", ["/api/predict", "/api/explain"])
+class TestPredictEndpoints:
+    @pytest.mark.parametrize("payload", [CLIENT_PAYLOAD, ML_PAYLOAD])
+    def test_both_schemas_accepted(self, client, endpoint, payload):
+        r = client.post(endpoint, json=payload)
+        assert r.status_code == 200
+        assert r.json()["recommended_action"] in {"Study", "Revise", "Sleep/Break"}
 
-class TestModelInfo:
-    def test_model_info_returns_200(self, client):
-        response = client.get("/model-info")
-        assert response.status_code == 200
+    def test_action_id_matches_label(self, client, endpoint):
+        body = client.post(endpoint, json=ML_PAYLOAD).json()
+        assert main.ACTION_LABELS[body["action_id"]] == body["recommended_action"]
 
-    def test_model_info_fields(self, client):
-        data = client.get("/model-info").json()
-        assert "model_version" in data
-        assert "created_at"    in data
-        assert "framework"     in data
-        assert "extra"         in data
+    def test_adaptive_weights_sum_to_one(self, client, endpoint):
+        w = client.post(endpoint, json=CLIENT_PAYLOAD).json()["adaptive_weights"]
+        assert w["q_learning"] + w["sarsa"] == pytest.approx(1.0)
 
-    def test_model_info_version(self, client):
-        data = client.get("/model-info").json()
-        assert data["model_version"] == "1.0.0"
+    def test_critical_stress_forces_rest(self, client, endpoint):
+        r = client.post(endpoint, json={**CLIENT_PAYLOAD, "stress_level": "critical"})
+        assert r.json()["recommended_action"] == "Sleep/Break"
+
+    def test_stress_95_forces_rest(self, client, endpoint):
+        r = client.post(endpoint, json={**ML_PAYLOAD, "stress": 95, "fatigue": 0})
+        assert r.json()["recommended_action"] == "Sleep/Break"
+
+    @pytest.mark.parametrize("bad", [
+        {**CLIENT_PAYLOAD, "stress_level": "banana"},
+        {**CLIENT_PAYLOAD, "stress_level": 5},
+        {**CLIENT_PAYLOAD, "hours_studied": -1},
+        {**CLIENT_PAYLOAD, "current_performance": 1.5},
+        {**ML_PAYLOAD, "difficulty": "insane"},
+        {**ML_PAYLOAD, "stress": 101},
+        {"fatigue": 10},
+        {},
+    ])
+    def test_invalid_input_returns_422(self, client, endpoint, bad):
+        assert client.post(endpoint, json=bad).status_code == 422
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# /predict
-# ═══════════════════════════════════════════════════════════════════════════════
+class TestExplain:
+    def test_explain_fields(self, client):
+        body = client.post("/api/explain", json=CLIENT_PAYLOAD).json()
+        assert body["explanation"]
+        assert set(body["q_values"]) == {"q_learning", "sarsa", "combined"}
 
-class TestPredict:
-    VALID_PAYLOAD = {
-        "stress_level":          "high",
-        "hours_studied":          4.0,
-        "days_until_exam":        5,
-        "current_performance":    0.6,
-    }
+    def test_input_state_excludes_client_fields(self, client):
+        state = client.post("/api/explain", json=CLIENT_PAYLOAD).json()["input_state"]
+        assert set(state) == {"fatigue", "stress", "retention", "days_left", "difficulty"}
 
-    def test_predict_returns_200(self, client):
-        response = client.post("/predict", json=self.VALID_PAYLOAD)
-        assert response.status_code == 200
+    def test_client_schema_mapping(self, client):
+        state = client.post("/api/explain", json=CLIENT_PAYLOAD).json()["input_state"]
+        assert state["stress"] == 85 and state["fatigue"] == 60
+        assert state["days_left"] == 3 and state["retention"] == 0.4
 
-    def test_predict_response_schema(self, client):
-        data = client.post("/predict", json=self.VALID_PAYLOAD).json()
-        assert "action_index"  in data
-        assert "action_label"  in data
-        assert "confidence"    in data
-        assert "reasoning"     in data
-        assert "request_state" in data
+    def test_override_documented_in_explanation(self, client):
+        body = client.post("/api/explain", json={**CLIENT_PAYLOAD, "stress_level": "critical"}).json()
+        assert "Safety override" in body["explanation"]
 
-    def test_predict_action_index_range(self, client):
-        data = client.post("/predict", json=self.VALID_PAYLOAD).json()
-        assert 0 <= data["action_index"] <= 3
 
-    def test_predict_action_label_valid(self, client):
-        valid_labels = {"rest", "light_study", "moderate_study", "intense_study"}
-        data = client.post("/predict", json=self.VALID_PAYLOAD).json()
-        assert data["action_label"] in valid_labels
+class TestAnalyticsEndpoints:
+    def test_study_plan(self, client):
+        body = client.post("/api/study-plan", json=ML_PAYLOAD).json()
+        assert len(body["plan"]) == 7 and "summary" in body
 
-    def test_predict_all_stress_levels(self, client):
-        for level in ["low", "medium", "high", "critical"]:
-            payload = {**self.VALID_PAYLOAD, "stress_level": level}
-            response = client.post("/predict", json=payload)
-            assert response.status_code == 200, f"Failed for stress_level={level}"
+    def test_study_plan_capped_at_14_days(self, client):
+        body = client.post("/api/study-plan", json={**ML_PAYLOAD, "days_left": 60}).json()
+        assert len(body["plan"]) == 14
 
-    def test_predict_invalid_stress_level(self, client):
-        payload = {**self.VALID_PAYLOAD, "stress_level": "extreme"}
-        response = client.post("/predict", json=payload)
-        assert response.status_code == 422
+    def test_burnout(self, client):
+        assert "burnout_risk" in client.post("/api/burnout", json=ML_PAYLOAD).json()
 
-    def test_predict_hours_out_of_range(self, client):
-        payload = {**self.VALID_PAYLOAD, "hours_studied": 25.0}
-        response = client.post("/predict", json=payload)
-        assert response.status_code == 422
+    def test_wellness(self, client):
+        body = client.post("/api/wellness", json=ML_PAYLOAD).json()
+        assert {"productivity", "wellness", "burnout_risk"} <= set(body)
 
-    def test_predict_negative_days(self, client):
-        payload = {**self.VALID_PAYLOAD, "days_until_exam": -1}
-        response = client.post("/predict", json=payload)
-        assert response.status_code == 422
 
-    def test_predict_missing_required_field(self, client):
-        payload = {k: v for k, v in self.VALID_PAYLOAD.items() if k != "stress_level"}
-        response = client.post("/predict", json=payload)
-        assert response.status_code == 422
+class TestHistory:
+    def test_history_roundtrip(self, client):
+        assert client.get("/api/history").status_code == 200
+        assert client.delete("/api/history").json()["status"] == "ok"
+        assert client.get("/api/history").json()["total"] == 0
 
-    def test_predict_request_state_echoed(self, client):
-        response = client.post("/predict", json=self.VALID_PAYLOAD)
-        data = response.json()
-        assert data["request_state"]["stress_level"] == "high"
-        assert data["request_state"]["hours_studied"] == 4.0
+    @pytest.mark.parametrize("limit", [0, -1, 51])
+    def test_invalid_limit_rejected(self, client, limit):
+        assert client.get(f"/api/history?limit={limit}").status_code == 422
 
-    def test_predict_confidence_in_range(self, client):
-        data = client.post("/predict", json=self.VALID_PAYLOAD).json()
-        assert 0.0 <= data["confidence"] <= 1.0
 
-    def test_predict_reasoning_non_empty(self, client):
-        data = client.post("/predict", json=self.VALID_PAYLOAD).json()
-        assert len(data["reasoning"]) > 0
-
-    def test_predict_boundary_hours_zero(self, client):
-        payload = {**self.VALID_PAYLOAD, "hours_studied": 0.0}
-        assert client.post("/predict", json=payload).status_code == 200
-
-    def test_predict_boundary_hours_max(self, client):
-        payload = {**self.VALID_PAYLOAD, "hours_studied": 24.0}
-        assert client.post("/predict", json=payload).status_code == 200
-
-    def test_predict_boundary_days_zero(self, client):
-        payload = {**self.VALID_PAYLOAD, "days_until_exam": 0}
-        assert client.post("/predict", json=payload).status_code == 200
+def test_home_page_renders(client):
+    r = client.get("/")
+    assert r.status_code == 200 and "text/html" in r.headers["content-type"]

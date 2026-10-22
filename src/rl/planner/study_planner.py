@@ -1,6 +1,6 @@
 """
 Multi-Day Adaptive Study Planner
-Exam Stress Balancer — v3.0
+Exam Stress Balancer
 
 Uses the trained hybrid RL model to simulate and generate
 an intelligent day-by-day study plan for the remaining exam preparation period.
