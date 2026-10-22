@@ -8,10 +8,10 @@ The student's cognitive and temporal state is mapped into 5 distinct dimensions.
 
 | Feature | Range | Bins |
 |---------|-------|------|
-| **Fatigue** | 0 - 100 | LOW (<40), MEDIUM (40-70), HIGH (>70) |
-| **Stress** | 0 - 100 | LOW (<40), MEDIUM (40-70), HIGH (>70) |
-| **Retention** | 0.0 - 1.0 | LOW (<0.4), MEDIUM (0.4-0.8), HIGH (>0.8) |
-| **Days Left** | 0 - ∞ | LOW Urgency, MEDIUM Urgency, HIGH Urgency |
+| **Fatigue** | 0 - 100 | LOW (<33), MEDIUM (33-66), HIGH (≥66) |
+| **Stress** | 0 - 100 | LOW (<33), MEDIUM (33-66), HIGH (≥66) |
+| **Retention** | 0.0 - 1.0 | LOW (<0.33), MEDIUM (0.33-0.66), HIGH (≥0.66) |
+| **Days Left** | 0 - ∞ | HIGH urgency (≤2 days), MEDIUM (3-5), LOW (>5) |
 | **Difficulty**| str | EASY, MEDIUM, HARD |
 
 ## Action Space (3 Actions)
@@ -30,10 +30,10 @@ We train two distinct RL agents that learn simultaneously:
 
 ## Adaptive Weighting Logic
 
-The core of `v3.0` is the adaptive weighting engine. Rather than a static 50/50 split, the system dynamically weights the Q-values from both agents based on the student's state:
+The core of the hybrid engine is the adaptive weighting engine. Rather than a static 50/50 split, the system dynamically weights the Q-values from both agents based on the student's state:
 
 - **Safety Mode (SARSA 55%, Q-Learning 45%):** Triggered when `fatigue > 70` or `stress > 70`. Prioritizes the conservative SARSA agent to prevent pushing the student into a burnout state.
-- **Performance Mode (Q-Learning 75%, SARSA 25%):** Triggered when `retention < 0.4` and `days_left <= 3`. The student is in a critical learning deficit with high urgency. Prioritizes the aggressive Q-Learning agent to maximize output.
+- **Performance Mode (Q-Learning 75%, SARSA 25%):** Triggered when `retention < 0.5` and `days_left <= 3`. The student is in a critical learning deficit with high urgency. Prioritizes the aggressive Q-Learning agent to maximize output.
 - **Balanced (Q-Learning 60%, SARSA 40%):** Default state for nominal learning.
 
 ## Critical Safety Boundary
