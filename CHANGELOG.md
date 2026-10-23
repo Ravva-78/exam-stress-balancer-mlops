@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- GitHub repository polish: MIT License, Render deployment blueprint (`render.yaml`), standardized issue and pull request templates, and CD workflow.
+
 ### Fixed
 - Non-string `stress_level` crashed the API with a 500; invalid values (and unknown strings such as `"banana"`) now return 422 instead of silently defaulting to medium stress.
 - `difficulty` is now validated (`easy|medium|hard`); unknown values previously missed the Q-table and silently scored 0.
