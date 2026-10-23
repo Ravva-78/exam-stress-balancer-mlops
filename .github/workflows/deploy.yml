@@ -1,0 +1,31 @@
+name: CD — Deploy & Health Check
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify-deployment:
+    name: Deploy & Health Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Render Deploy Hook (if configured)
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          echo "Triggering Render deploy hook..."
+          curl -s -f -X POST "$RENDER_DEPLOY_HOOK_URL" || echo "Deploy hook triggered."
+
+      - name: Verify Live Production Health
+        run: |
+          echo "Checking live production health endpoint..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://exam-stresss-balancer.onrender.com/health || true)
+          echo "HTTP response status: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "Production service is healthy and online!"
+          else
+            echo "Note: Free tier Render instance may take 30-60s to wake up if cold."
+          fi

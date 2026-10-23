@@ -8,26 +8,52 @@ on:
 
 jobs:
   test:
-    name: Run Unit Tests
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install fastapi uvicorn pydantic python-multipart jinja2 numpy pyyaml pytest httpx
+          pip install -r requirements.txt
+          pip install pytest httpx
+
+      - name: Syntax check
+        run: |
+          python -m compileall src tests
 
       - name: Run unit tests
         run: |
-          cd $GITHUB_WORKSPACE
-          python -m pytest -q
+          python -m pytest -v
         env:
           PYTHONPATH: ${{ github.workspace }}
+
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (dry-run)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: exam-stress-balancer:ci-test

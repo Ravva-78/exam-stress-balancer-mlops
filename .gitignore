@@ -45,8 +45,10 @@ data/session_history.json
 # Logs
 logs/*.log
 
-# Model artefacts (tracked by DVC, not git)
+# Model artefacts (tracked by DVC, not git — except committed serving tables)
 models/*.pkl
+!models/q_learning.pkl
+!models/sarsa.pkl
 models/metadata.json
 
 # Test coverage

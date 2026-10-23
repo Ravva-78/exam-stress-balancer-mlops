@@ -8,13 +8,14 @@
 
 [![CI](https://github.com/Ravva-78/exam-stress-balancer-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/Ravva-78/exam-stress-balancer-mlops/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Render-success?logo=render)](https://exam-stresss-balancer.onrender.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![MLflow](https://img.shields.io/badge/MLflow-tracked-0194E2?logo=mlflow&logoColor=white)](https://mlflow.org)
 [![DVC](https://img.shields.io/badge/DVC-pipeline-945DD6?logo=dvc&logoColor=white)](https://dvc.org)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://docker.com)
 
-**[Live demo](https://exam-stresss-balancer.onrender.com)** (free tier — the first request may take ~30 s to wake) · **[API docs](docs/api.md)** · **[Architecture](docs/architecture.md)**
+**[Live demo](https://exam-stresss-balancer.onrender.com)** (free tier — the first request may take ~30 s to wake) · **[API docs](docs/api.md)** · **[Architecture](docs/architecture.md)** · [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Ravva-78/exam-stress-balancer-mlops)
 
 ![Dashboard](docs/assets/screenshots/dashboard.png)
 
@@ -123,3 +124,7 @@ Honest scope, so you know what this is and isn't:
 ## Author
 
 Built by [**@Ravva-78**](https://github.com/Ravva-78) as an end-to-end ML engineering portfolio project (RL, MLOps, backend, UI). Feedback and issues welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the [CHANGELOG](CHANGELOG.md).
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
